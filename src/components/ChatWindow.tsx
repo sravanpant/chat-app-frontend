@@ -9,6 +9,7 @@ import ChatInput from "./ChatInput";
 import LoadingSpinner from "./LoadingSpinner";
 import type { Message, ChatState } from "@/types/types";
 import { MessageCircleCode } from "lucide-react";
+import { useScrollManager } from "@/hooks/useScrollManager";
 
 export default function ChatWindow() {
   const { user, isLoaded: isUserLoaded } = useUser();
@@ -22,17 +23,12 @@ export default function ChatWindow() {
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Improved scroll handling
-  const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, []);
+  const scrollRef = useScrollManager([state.messages], {
+    behavior: state.isLoading ? "auto" : "smooth",
+    threshold: 150,
+  });
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [state.messages, scrollToBottom]);
-
+  
   // Message loading and socket setup
   useEffect(() => {
     const loadMessages = async () => {
@@ -82,7 +78,6 @@ export default function ChatWindow() {
           messages: [...prev.messages, message],
         };
       });
-      scrollToBottom();
     }
 
     function onTyping() {
@@ -106,7 +101,7 @@ export default function ChatWindow() {
       socket.off("newMessage", onNewMessage);
       socket.off("typing", onTyping);
     };
-  }, [scrollToBottom]);
+  }, []);
 
   const sendMessage = async (content: string) => {
     if (!user || !content.trim()) return;
@@ -159,7 +154,11 @@ export default function ChatWindow() {
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-4 scroll-smooth"
+        style={{ height: "calc(100vh - 144px)" }}
+      >
         <div className="max-w-3xl mx-auto space-y-4">
           {state.messages.map((message) => (
             <ChatMessage
