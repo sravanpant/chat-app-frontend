@@ -1,7 +1,7 @@
 // components/ChatMessage.tsx
 import { cn } from "@/lib/utils";
 import { ChatMessageProps } from "@/types/types";
-import { Check, Clock } from "lucide-react";
+import { Check } from "lucide-react";
 
 export default function ChatMessage({
   message,
@@ -34,7 +34,7 @@ export default function ChatMessage({
             </span>
             {isOwnMessage && (
               <span className="text-xs">
-                {message.status === "sending" ? <Clock /> : <Check size={15} />}
+                <Check size={15} />
               </span>
             )}
           </div>

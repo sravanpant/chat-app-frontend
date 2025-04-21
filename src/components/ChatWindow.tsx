@@ -1,15 +1,35 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { socket } from "@/lib/socket";
 import { api } from "@/lib/api";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import LoadingSpinner from "./LoadingSpinner";
+import DateSeparator from "./DateSeparator";
 import type { Message, ChatState } from "@/types/types";
 import { MessageCircleCode } from "lucide-react";
 import { useScrollManager } from "@/hooks/useScrollManager";
+
+const formatDateForSeparator = (date: Date): string => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  } else {
+    return date.toLocaleDateString(undefined, { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  }
+};
 
 export default function ChatWindow() {
   const { user, isLoaded: isUserLoaded } = useUser();
@@ -67,17 +87,48 @@ export default function ChatWindow() {
     }
 
     function onNewMessage(message: Message) {
-      console.log("Received new message:", message);
+      // console.log("Received new message:", message);
       setState((prev) => {
-        // Check if message already exists
-        if (prev.messages.some((msg) => msg.messageId === message.messageId)) {
-          return prev;
+        // Find the message either by its temporary ID or permanent ID
+        const messageIndex = prev.messages.findIndex(
+          msg => msg.messageId === message.tempMessageId || msg.messageId === message.messageId
+        );
+
+        const updatedMessages = [...prev.messages];
+
+        if (messageIndex !== -1) {
+          // Update existing message
+          updatedMessages[messageIndex] = {
+            ...message,
+            status: "sent"
+          };
+        } else {
+          // Add new message
+          updatedMessages.push({
+            ...message,
+            status: "sent"
+          });
         }
+
         return {
           ...prev,
-          messages: [...prev.messages, message],
+          messages: updatedMessages,
+          error: null
         };
       });
+    }
+
+    function onMessageError({ messageId, error }: { messageId: string; error: string }) {
+      console.error("Message error:", messageId, error);
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages.map(msg =>
+          msg.messageId === messageId
+            ? { ...msg, status: "error" }
+            : msg
+        ),
+        error
+      }));
     }
 
     function onTyping() {
@@ -92,6 +143,7 @@ export default function ChatWindow() {
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("newMessage", onNewMessage);
+    socket.on("messageError", onMessageError);
     socket.on("typing", onTyping);
 
     // Cleanup
@@ -99,29 +151,46 @@ export default function ChatWindow() {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("newMessage", onNewMessage);
+      socket.off("messageError", onMessageError);
       socket.off("typing", onTyping);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
   }, []);
 
   const sendMessage = async (content: string) => {
-    if (!user || !content.trim()) return;
+    if (!user || !content.trim() || !state.isConnected) return;
 
+    const tempMessageId = `temp_${Date.now()}`;
     const messageData = {
+      messageId: tempMessageId,
       content: content.trim(),
       sender: user.id,
       senderName: user.fullName || "Anonymous",
       timestamp: new Date().toISOString(),
-      messageId: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      status: "sending" as const
     };
 
+    // Add message to state immediately with sending status
+    setState((prev) => ({
+      ...prev,
+      messages: [...prev.messages, messageData],
+      error: null
+    }));
+
     try {
-      // Emit to socket server directly
       socket.emit("message", messageData);
     } catch (err) {
       console.error("Error sending message:", err);
       setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : String(err),
+        messages: prev.messages.map(msg =>
+          msg.messageId === tempMessageId
+            ? { ...msg, status: "error" }
+            : msg
+        ),
+        error: err instanceof Error ? err.message : String(err)
       }));
     }
   };
@@ -130,6 +199,42 @@ export default function ChatWindow() {
   const handleTyping = useCallback(() => {
     socket.emit("typing");
   }, []);
+
+  const renderMessagesWithSeparators = () => {
+    let currentDate = '';
+    
+    return state.messages.map((message) => {
+      const messageDate = new Date(message.timestamp);
+      const dateStr = messageDate.toDateString();
+      let separator = null;
+      
+      if (dateStr !== currentDate) {
+        currentDate = dateStr;
+        separator = (
+          <DateSeparator 
+            key={`date-${dateStr}`} 
+            date={formatDateForSeparator(messageDate)} 
+          />
+        );
+      }
+      
+      return (
+        <React.Fragment key={`message-group-${message.messageId}`}>
+          {separator}
+          <ChatMessage
+            message={{
+              messageId: String(message.messageId),
+              content: message.content,
+              sender: message.sender,
+              senderName: message.senderName,
+              timestamp: message.timestamp
+            }}
+            isOwnMessage={message.sender === user?.id}
+          />
+        </React.Fragment>
+      );
+    });
+  };
 
   if (!isUserLoaded) return <LoadingSpinner />;
 
@@ -160,13 +265,7 @@ export default function ChatWindow() {
         style={{ height: "calc(100vh - 144px)" }}
       >
         <div className="max-w-3xl mx-auto space-y-4">
-          {state.messages.map((message) => (
-            <ChatMessage
-              key={message.messageId}
-              message={message}
-              isOwnMessage={message.sender === user?.id}
-            />
-          ))}
+          {renderMessagesWithSeparators()}
           {isTyping && (
             <div className="flex items-center space-x-2 text-gray-500">
               <div className="animate-pulse">...</div>

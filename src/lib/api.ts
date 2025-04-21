@@ -84,12 +84,11 @@ export const api = {
       // Extract the message from Strapi's response format
       // Access properties directly on result.data without 'attributes'
       return {
-        id: result.data.id,
+        messageId: result.data.messageId,
         content: result.data.content,
         sender: result.data.sender,
         senderName: result.data.senderName,
         timestamp: result.data.timestamp,
-        messageId: result.data.messageId,
         createdAt: result.data.createdAt,
         updatedAt: result.data.updatedAt,
         publishedAt: result.data.publishedAt,

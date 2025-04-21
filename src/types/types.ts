@@ -5,23 +5,24 @@ export interface MessageAttributes {
   senderName: string;
   timestamp: string;
   messageId: string;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt: string;
-  status?: "sending" | "sent";
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  tempMessageId?: string;
+  status?: "sending" | "sent" | "error";
 }
 
 export interface Message {
-  id: number;
+  messageId: string | number;
   content: string;
   sender: string;
   senderName: string;
   timestamp: string;
-  messageId: string;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt: string;
-  status?: "sending" | "sent";
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  tempMessageId?: string;
+  status?: "sending" | "sent" | "error";
 }
 
 export interface CreateMessageData {
@@ -66,4 +67,8 @@ export interface ChatInputProps {
 export interface ChatMessageProps {
   message: MessageAttributes;
   isOwnMessage: boolean;
+}
+
+export interface DateSeparatorProps {
+  date: string;
 }
